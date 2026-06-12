@@ -1,0 +1,188 @@
+services:
+  gateway-nginx:
+    image: nginx:1.27-alpine
+    container_name: base_gateway_nginx
+    command: >
+      sh -c "
+      mkdir -p /etc/nginx/conf.d &&
+      for f in /etc/nginx/templates/*.template; do
+        out=/etc/nginx/conf.d/$$(basename \"$$f\" .template);
+        envsubst '$${API_DOMAIN} $${PORTAL_DOMAIN} $${CHAIN_DOMAIN} $${STORE_DOMAIN} $${MAIL_DOMAIN} $${SQS_DOMAIN} $${LOCALSTACK_DOMAIN} $${MOCK_DOMAIN} $${INTERNAL_API_HOST}' < \"$$f\" > \"$$out\";
+      done &&
+      nginx -g 'daemon off;'
+      "
+    environment:
+      API_DOMAIN: ${API_DOMAIN:-api.base.com}
+      PORTAL_DOMAIN: ${PORTAL_DOMAIN:-admin.base.com}
+      INTERNAL_API_HOST: ${INTERNAL_API_HOST:-laravel.api.com}
+      # CHAIN_DOMAIN: ${CHAIN_DOMAIN:-chain.base.com}
+      # STORE_DOMAIN: ${STORE_DOMAIN:-store.base.com}
+      # PORTAL_DOMAIN: ${PORTAL_DOMAIN:-portal.base.com}
+      # MAIL_DOMAIN: ${MAIL_DOMAIN:-mail.base.com}
+      # SQS_DOMAIN: ${SQS_DOMAIN:-sqs.base.com}
+      # LOCALSTACK_DOMAIN: ${LOCALSTACK_DOMAIN:-localstack.base.com}
+      # MOCK_DOMAIN: ${MOCK_DOMAIN:-mock.base.com}
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./docker/nginx/templates:/etc/nginx/templates:ro
+      - ./docker/certs:/etc/nginx/certs:ro
+    depends_on:
+      - api-nginx
+      - frontend-node
+      - mailpit
+      - localstack
+      - mock-api
+    networks:
+      - base-net
+
+  api-php:
+    build:
+      context: ./api
+      dockerfile: local/php/Dockerfile
+    container_name: base_api_php
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /var/www/api/src
+    volumes:
+      - ./api:/var/www/api
+      - ./api/local/php/php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
+    depends_on:
+      - mysql
+      # - localstack
+    networks:
+      - base-net
+
+  api-nginx:
+    image: nginx:1.27-alpine
+    container_name: base_api_nginx
+    volumes:
+      - ./api:/var/www/api
+      - ./api/local/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/certs:/etc/nginx/certs:ro
+    depends_on:
+      - api-php
+    networks:
+      - base-net
+
+  mysql:
+    image: mysql:8.4
+    container_name: base_mysql
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DB_LOCAL: ${MYSQL_DB_LOCAL:-db_local}
+      MYSQL_DB_TEST: ${MYSQL_DB_TEST:-laravel_test}
+      MYSQL_APP_USER: ${MYSQL_APP_USER:-smart}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-smart}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+      - "${MYSQL_PORT_ALT:-13306}:3306"
+    volumes:
+      - base_mysql_data:/var/lib/mysql
+      - ./docker/mysql/initdb:/docker-entrypoint-initdb.d:ro
+    networks:
+      - base-net
+
+  # localstack:
+  #   image: localstack/localstack:3.7
+  #   container_name: base_localstack
+  #   environment:
+  #     SERVICES: s3,sqs,sns
+  #     DEBUG: 1
+  #     AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+  #     EDGE_PORT: 4566
+  #   ports:
+  #     - "${LOCALSTACK_PORT:-4566}:4566"
+  #   volumes:
+  #     - ./docker/localstack/init:/etc/localstack/init/ready.d
+  #     - base_localstack_data:/var/lib/localstack
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   networks:
+  #     - base-net
+
+  # mailpit:
+  #   image: axllent/mailpit:latest
+  #   container_name: base_mailpit
+  #   ports:
+  #     - "${MAILPIT_SMTP_PORT:-1025}:1025"
+  #     - "${MAILPIT_UI_PORT:-8025}:8025"
+  #   networks:
+  #     - base-net
+
+  frontend-node:
+    image: node:24
+    container_name: base_frontend_node
+    working_dir: /workspace
+    command: >
+      sh -c "
+      cd /workspace/admin_portal &&
+      if [ ! -x node_modules/.bin/nuxt ]; then npm install --legacy-peer-deps; fi &&
+      cd /workspace/chain_portal &&
+      if [ ! -x node_modules/.bin/nuxt ]; then npm install --legacy-peer-deps; fi &&
+      cd /workspace/store_portal &&
+      if [ ! -x node_modules/.bin/nuxt ]; then npm install --legacy-peer-deps; fi &&
+      (cd /workspace/admin_portal && npm run dev -- --host 0.0.0.0 --port 3000) &
+      # (cd /workspace/chain_portal && npm run dev -- --host 0.0.0.0 --port 3001) &
+      # (cd /workspace/store_portal && npm run dev -- --host 0.0.0.0 --port 3002) &
+      wait
+      "
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "100"
+      WATCHPACK_POLLING: "true"
+      NUXT_DEVTOOLS: "false"
+      NUXT_API_BASE_SERVER: "http://api-nginx"
+      # Trình duyệt gọi API qua hostname gateway (HTTPS).
+      NUXT_PUBLIC_API_BASE: https://${API_DOMAIN:-api.base.com}
+      ADMIN_PORTAL_DOMAIN: ${PORTAL_DOMAIN:-admin.base.com}
+    volumes:
+      - ./admin_portal:/workspace/admin_portal
+      # - ./chain_portal:/workspace/chain_portal
+      # - ./store_portal:/workspace/store_portal
+    expose:
+      - "3000"
+      # - "3001"
+      # - "3002"
+    networks:
+      - base-net
+
+  # mock-api:
+  #   build:
+  #     context: ./docker/mock-api
+  #   container_name: base_mock_api
+  #   environment:
+  #     PORT: "4000"
+  #   volumes:
+  #     - mock_api_data:/data
+  #   expose:
+  #     - "4000"
+  #   networks:
+  #     - base-net
+
+  # sqs-admin:
+  #   image: akilamaxi/sqs-admin-ui:v1
+  #   container_name: base_sqs_admin
+  #   environment:
+  #     SQS_ENDPOINT_URL: http://localstack:4566
+  #     AWS_REGION: ${AWS_REGION:-us-east-1}
+  #   ports:
+  #     - "${SQS_ADMIN_PORT:-8380}:8080"
+  #   depends_on:
+  #     - localstack
+  #   networks:
+  #     - base-net
+
+networks:
+  base-net:
+    driver: bridge
+
+volumes:
+  base_mysql_data:
+  # base_localstack_data:
+  # mock_api_data:
+  # base_mailpit_data:
+  # base_frontend_node_data:
+  # base_mock_api_data:
+  # base_sqs_admin_data:

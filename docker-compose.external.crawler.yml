@@ -1,0 +1,63 @@
+# mairy-crawl (tách khỏi external-up) — make external-crawler-up
+# Cần trước: make d-services-up && make external-up (LocalStack + backend nginx)
+#
+#   make external-crawler-build | external-crawler-up | external-crawler-down | external-crawler-logs
+
+name: ${PROJECT_NAME:-local_dev}-external
+
+services:
+  external-crawler-selenium:
+    build:
+      context: ../mairy-crawl/images/selenium-image
+      dockerfile: Dockerfile
+    container_name: ${PROJECT_NAME:-local_dev}_external_crawler_selenium
+    volumes:
+      - external_crawler_share:/tmp
+    ports:
+      - "${EXTERNAL_SELENIUM_PORT:-4444}:4444"
+      - "${EXTERNAL_SELENIUM_VNC_PORT:-5900}:5900"
+    networks:
+      - base-shared
+
+  external-crawler:
+    build:
+      context: ./external/crawler
+      dockerfile: Dockerfile
+    container_name: ${PROJECT_NAME:-local_dev}_external_crawler
+    restart: unless-stopped
+    env_file:
+      - path: ./external/crawler/local.env
+        required: false
+    environment:
+      SELENIUM_WAIT_SEC: "${CRAWLER_SELENIUM_WAIT_SEC:-0}"
+      SELENIUM_HOST: http://external-crawler-selenium:4444/wd/hub
+      API_URL: ${CRAWLER_API_URL:-http://external-nginx:8082/}
+      API_TOKEN: ${CRAWLER_API_TOKEN:-55e64f00b18aaaf7e5696371dbc1e670}
+      CSV_UPLOAD_URL_NEPPAN: v1/neppan/csv_upload
+      CSV_UPLOAD_URL_TL: v1/tl/csv_upload
+      ERROR_NOTIFICATION: api
+      ERROR_API_END_POINT: v1/log/write
+      AWS_REGION: ${CRAWLER_AWS_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: ${CRAWLER_AWS_ENDPOINT_URL:-http://localstack:4566}
+      AWS_CREDENTIALS_KEY: ${CRAWLER_AWS_ACCESS_KEY_ID:-test}
+      AWS_CREDENTIALS_SECRET: ${CRAWLER_AWS_SECRET_ACCESS_KEY:-test}
+      SKIP_SQS_FLG: "${CRAWLER_SKIP_SQS_FLG:-false}"
+      SQS_TASK_URL: ${CRAWLER_SQS_TASK_URL:-http://localstack:4566/000000000000/queue_crawl_task.fifo}
+      SQS_RESULT_URL: ${CRAWLER_SQS_RESULT_URL:-http://localstack:4566/000000000000/queue_default.fifo}
+    volumes:
+      - ../mairy-crawl/images/base-image/main.php:/var/www/html/main.php:ro
+      - ../mairy-crawl/images/base-image/lib:/var/www/lib:ro
+      - external_crawler_share:/tmp
+    depends_on:
+      - external-crawler-selenium
+    networks:
+      - base-shared
+
+networks:
+  base-shared:
+    name: ${BASE_SHARED_NETWORK_NAME:-base_shared_net}
+    external: true
+
+volumes:
+  external_crawler_share:
+    name: ${PROJECT_NAME:-local_dev}_external_crawler_share

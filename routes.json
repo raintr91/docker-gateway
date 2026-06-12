@@ -1,0 +1,59 @@
+{
+  "_comment": "Gateway + hosts đọc file này. Host nên *.SSL_DOMAIN_BASE (docker/.env). gen-dev-ssl không đọc file này.",
+  "shared": [
+    {
+      "title": "Shared (DB admin UI)",
+      "hosts": ["phpmyadmin.local.com", "pgadmin.local.com"]
+    },
+    {
+      "title": "Shared (dev tools — docker-compose.services.yml)",
+      "hosts": ["mail.local.com", "mock.local.com", "stackport.local.com"]
+    }
+  ],
+  "projects": {
+    "base": {
+      "api": {
+        "host": "api-base.local.com",
+        "stack": "base",
+        "internal": "laravel.api.com"
+      },
+      "portals": [{ "host": "portal-base.local.com", "stack": "base" }]
+    },
+    "mairy": {
+      "external": true,
+      "sites": [
+        { "host": "mairy-admin.local.com", "port": 18082, "role": "web" },
+        { "host": "mairy-fullsco.local.com", "port": 18081, "role": "web" },
+        { "host": "mairy-scenario.local.com", "port": 18084, "role": "web" },
+        { "host": "mairy-store.local.com", "port": 3001, "role": "node" }
+      ]
+    },
+    "saas": {
+      "api": {
+        "host": "saas-api.local.com",
+        "stack": "saas",
+        "internal": "saas-api.local.com"
+      },
+      "portals": [
+        { "host": "saas-admin.local.com", "stack": "saas-admin" },
+        { "host": "saas-chain.local.com", "stack": "saas-chain" },
+        { "host": "saas-store.local.com", "stack": "saas-store" }
+      ]
+    },
+    "onceCrm": {
+      "portals": [
+        { "host": "one-crm-api.local.com", "stack": "one-crm-api" },
+        { "host": "one-crm-admin.local.com", "stack": "one-crm-admin" },
+        { "host": "one-crm-chain.local.com", "stack": "one-crm-chain" },
+        { "host": "one-crm-store.local.com", "stack": "one-crm-store" }
+      ]
+    },
+    "bandai": {
+      "portals": [
+        { "host": "bandai-namco-api.local.com", "stack": "bandai-api" },
+        { "host": "bandai-namco-chain.local.com", "stack": "bandai-chain" },
+        { "host": "bandai-namco-store.local.com", "stack": "bandai-store" }
+      ]
+    }
+  }
+}

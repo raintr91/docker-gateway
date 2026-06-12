@@ -1,0 +1,27 @@
+server {
+    listen 80;
+    server_name ${STORE_DOMAIN};
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name ${STORE_DOMAIN};
+
+    ssl_certificate /etc/nginx/certs/dev-server.fullchain.crt;
+    ssl_certificate_key /etc/nginx/certs/dev-server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    location / {
+        set $store_upstream http://frontend-node:3002;
+        proxy_pass $store_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
