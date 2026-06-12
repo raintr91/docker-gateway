@@ -1,1 +1,4 @@
 .env
+hosts.sample
+routes.json
+gateway/sites/

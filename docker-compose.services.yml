@@ -3,7 +3,7 @@
 #   cd docker && docker compose -f docker-compose.yml -f docker-compose.services.yml up -d
 # Hoặc: make d-services-up
 #
-# Gateway: file cứng trong gateway/sites/*.conf (mail, mock, stackport).
+# Gateway: file cứng trong gateway/sites/*.conf (mail, mock, stackport, redisadmin).
 
 services:
   # MySQL 8.0 (mysql_native_password). Host:127.0.0.1:${MYSQL_80_PORT:-13307}. phpMyAdmin: server "MySQL 8.0".
@@ -37,6 +37,18 @@ services:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - base-shared
+
+  # Redis UI — https://redisadmin.local.com (gateway/sites/redisadmin.local.com.conf).
+  # REDIS_HOSTS: label:host:port — kết nối sẵn tới service redis trên base_shared_net.
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: ${PROJECT_NAME:-local_dev}_redis_commander
+    depends_on:
+      - redis
+    environment:
+      REDIS_HOSTS: ${REDIS_COMMANDER_HOSTS:-local:redis:6379}
     networks:
       - base-shared
 

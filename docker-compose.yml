@@ -42,6 +42,7 @@ services:
           - pgadmin.local.com
           - phpmyadmin.local.com
           - portal-base.local.com
+          - redisadmin.local.com
           - saas-admin.local.com
           - saas-api.local.com
           - saas-chain.local.com

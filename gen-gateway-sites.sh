@@ -42,6 +42,23 @@ domain_to_conf() {
 
 mkdir -p "$SITES_DIR"
 
+# Infra (phpmyadmin, pgadmin, redisadmin, mail, mock, stackport) — không sinh từ routes.json.
+# Copy template từ gateway/sites.example/ nếu file chưa có (không ghi đè chỉnh tay).
+SITES_EXAMPLE_DIR="$PROJECT_ROOT/gateway/sites.example"
+copy_sites_example() {
+  [[ -d "$SITES_EXAMPLE_DIR" ]] || return 0
+  local f base
+  for f in "$SITES_EXAMPLE_DIR"/*.conf; do
+    [[ -f "$f" ]] || continue
+    base="$(basename "$f")"
+    if [[ ! -f "$SITES_DIR/$base" ]]; then
+      cp "$f" "$SITES_DIR/$base"
+      echo "[INFO] Copied infra template $base (from sites.example)"
+    fi
+  done
+}
+copy_sites_example
+
 write_api_conf() {
   local api_dom=$1 stack_slug=$2 internal_h=$3
   local api_upstream api_note

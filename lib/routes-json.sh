@@ -6,7 +6,7 @@ routes_json_init() {
   ROUTES_JSON="${script_dir}/routes.json"
   ROUTES_EMIT="${script_dir}/lib/routes-emit.py"
   if [[ ! -f "$ROUTES_JSON" ]]; then
-    echo "[ERROR] Missing $ROUTES_JSON — tạo từ docker/routes.json.example hoặc migrate từ routes.txt" >&2
+    echo "[ERROR] Missing $ROUTES_JSON — cp routes.json.example routes.json" >&2
     return 1
   fi
   if [[ ! -x "$ROUTES_EMIT" ]] && [[ ! -f "$ROUTES_EMIT" ]]; then

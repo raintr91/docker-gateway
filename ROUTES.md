@@ -1,6 +1,6 @@
 # Local dev — quy ước
 
-Chỉnh **`routes.json`**. Cần `python3` (parser: `lib/routes-emit.py`).
+Chỉnh **`routes.json`** (`cp routes.json.example routes.json`). Cần `python3` (parser: `lib/routes-emit.py`).
 
 ## Quy ước
 
@@ -21,7 +21,8 @@ Chỉnh **`routes.json`**. Cần `python3` (parser: `lib/routes-emit.py`).
 ## Lệnh
 
 ```bash
-make gen-sites   # gateway
+make gen-sites   # infra từ sites.example + project từ routes.json
+make init-sites  # chỉ infra (phpmyadmin, mail, mock, …)
 make hosts       # hosts.sample
 make gen-ssl     # ghi đè cert + nhắc install-windows-trust.bat trên Windows
 ```

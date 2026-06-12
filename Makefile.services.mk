@@ -7,10 +7,10 @@ DCS := docker compose --project-directory "$(ROOT)" -f docker-compose.yml -f doc
 	mysql80-up mysql80-down mysql80-restart mysql80-ps mysql80-logs
 
 d-services-up:
-	$(DCS) up -d redis localstack mailpit mock-api stackport
+	$(DCS) up -d redis redis-commander localstack mailpit mock-api stackport
 
 d-services-down:
-	$(DCS) stop redis localstack mailpit mock-api stackport
+	$(DCS) stop redis redis-commander localstack mailpit mock-api stackport
 
 d-services-ps:
 	$(DCS) ps -a

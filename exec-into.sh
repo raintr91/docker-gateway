@@ -29,6 +29,8 @@ Alias:
   gateway, gw          — gateway-nginx
   mysql, mysql-84      — MySQL 8.4
   mysql80, mysql-80    — MySQL 8.0
+  redis                — Redis
+  redis-commander, redisadmin — Redis Commander UI
   localstack           — LocalStack
   stackport            — StackPort (S3/SQS/SNS UI)
   mailpit, mail        — Mailpit
@@ -43,6 +45,8 @@ Alias           Service       Shell
 gateway, gw     gateway-nginx sh
 mysql           mysql         sh
 mysql80         mysql-80      bash
+redis           redis         sh
+redis-commander redis-commander sh
 localstack      localstack    bash
 stackport       stackport     sh
 mailpit, mail   mailpit       sh
@@ -78,6 +82,16 @@ resolve_target() {
       COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.services.yml)
       SERVICE=mysql-80
       SHELL_CMD="bash"
+      ;;
+    redis)
+      COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.services.yml)
+      SERVICE=redis
+      SHELL_CMD="sh"
+      ;;
+    redis-commander|redisadmin|redis-admin)
+      COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.services.yml)
+      SERVICE=redis-commander
+      SHELL_CMD="sh"
       ;;
     localstack)
       COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.services.yml)
