@@ -1,10 +1,14 @@
-# Hạ tầng chung: MySQL + phpMyAdmin + PostgreSQL + pgAdmin + gateway (API/portal TLS 443).
-#   docker compose up -d --remove-orphans
-#   make d-up   hoặc   docker compose up -d --remove-orphans
+# Hạ tầng chung: MySQL + phpMyAdmin + PostgreSQL + pgAdmin + gateway (TLS 443).
 #
-# Cấu hình gateway: chỉnh routes.json rồi
-#   make gen-sites   (mỗi domain một file trong gateway/sites/)
-# hoặc make gen-ssl (cert + sites). Mount sites → /etc/nginx/conf.d.
+# Khuyến nghị dùng Makefile (tự tạo mạng external + gateway/sites trước khi up):
+#   make d-up
+#
+# Trực tiếp compose (cần mạng + gateway/sites đã có — xem Makefile.docker.mk):
+#   docker compose up -d
+#
+# Gateway nginx conf: routes.json → make gen-sites (gateway/sites/*.conf → /etc/nginx/conf.d)
+# TLS mount: ./certs/${PROJECT_NAME}.${SSL_DOMAIN_BASE}.crt + .key
+# Data DB bind: ${DATA_PATH_HOST:-./data}/{mysql,mysql80,postgres,redis} — compose tự mkdir host
 
 services:
   gateway-nginx:
@@ -83,8 +87,8 @@ services:
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
-      # Bind mount (Laradock-style) — data trên host: ${MYSQL_DATA_DIR:-./data/mysql}
-      - ${MYSQL_DATA_DIR:-./data/mysql}:/var/lib/mysql
+      # Bind mount: ${DATA_PATH_HOST:-./data}/mysql (compose tự tạo folder host nếu chưa có)
+      - ${DATA_PATH_HOST:-./data}/mysql:/var/lib/mysql
       - ./mysql/initdb:/docker-entrypoint-initdb.d:ro
       - ./mysql/conf.d:/etc/mysql/conf.d:ro
     networks:
@@ -104,8 +108,8 @@ services:
     ports:
       - "${POSTGRES_PORT:-15432}:5432"
     volumes:
-      # Bind mount — data trên host: ${POSTGRES_DATA_DIR:-./data/postgres}
-      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
+      # Bind mount: ${DATA_PATH_HOST:-./data}/postgres (compose tự tạo folder host nếu chưa có)
+      - ${DATA_PATH_HOST:-./data}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
@@ -137,6 +141,8 @@ services:
       - base-shared
 
 networks:
+  # Mạng external — project khác join cùng BASE_SHARED_NETWORK_NAME.
+  # make d-up / d-up-all gọi ensure-shared-network (docker network create nếu chưa có).
   base-shared:
     name: ${BASE_SHARED_NETWORK_NAME:-base_shared_net}
-    driver: bridge
+    external: true

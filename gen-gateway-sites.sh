@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Sinh nginx gateway từ routes.json (không giới hạn số host / portal mỗi dự án).
-# .env: INTERNAL_API_HOST, API_CONTAINER_PORT, PORTAL_CONTAINER_PORT.
+# Sinh nginx gateway conf từ routes.json + copy infra từ gateway/sites.example/.
+#
+# Cert nginx (từ .env PROJECT_NAME + SSL_DOMAIN_BASE, lib/ssl-cert-names.sh):
+#   /etc/nginx/certs/<basename>.crt + .key   (vd. dev.local.com.crt)
+#
+# .env tùy chọn: INTERNAL_API_HOST, API_CONTAINER_PORT, PORTAL_CONTAINER_PORT.
 #
 # Usage: bash gen-gateway-sites.sh [path/to/.env] [path/to/sites-dir]
 
@@ -25,6 +29,10 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# shellcheck source=lib/ssl-cert-names.sh
+source "$SCRIPT_DIR/lib/ssl-cert-names.sh"
+ssl_cert_load_paths
+
 INTERNAL_DEFAULT="${INTERNAL_API_HOST:-laravel.api.com}"
 API_CONTAINER_PORT="${API_CONTAINER_PORT:-80}"
 PORTAL_CONTAINER_PORT="${PORTAL_CONTAINER_PORT:-3000}"
@@ -41,6 +49,12 @@ domain_to_conf() {
 }
 
 mkdir -p "$SITES_DIR"
+if [[ ! -w "$SITES_DIR" ]]; then
+  echo "[ERROR] $SITES_DIR not writable (thường do docker compose up trước gen-sites/init-sites)." >&2
+  echo "  Fix (sudo): sudo chown -R \$(id -u):\$(id -g) $SITES_DIR" >&2
+  echo "  Fix (docker): docker run --rm -v $SITES_DIR:/sites alpine chown -R \$(id -u):\$(id -g) /sites" >&2
+  exit 1
+fi
 
 # Infra (phpmyadmin, pgadmin, redisadmin, mail, mock, stackport) — không sinh từ routes.json.
 # Copy template từ gateway/sites.example/ nếu file chưa có (không ghi đè chỉnh tay).
@@ -52,7 +66,7 @@ copy_sites_example() {
     [[ -f "$f" ]] || continue
     base="$(basename "$f")"
     if [[ ! -f "$SITES_DIR/$base" ]]; then
-      cp "$f" "$SITES_DIR/$base"
+      sed "s/__SSL_CERT_BASENAME__/${SSL_CERT_BASENAME}/g" "$f" >"$SITES_DIR/$base"
       echo "[INFO] Copied infra template $base (from sites.example)"
     fi
   done
@@ -77,8 +91,8 @@ server {
 server {
     listen 443 ssl;
     server_name ${api_dom};
-    ssl_certificate /etc/nginx/certs/dev-server.fullchain.crt;
-    ssl_certificate_key /etc/nginx/certs/dev-server.key;
+    ssl_certificate ${SSL_CERT_FILE};
+    ssl_certificate_key ${SSL_CERT_KEY};
     ssl_protocols TLSv1.2 TLSv1.3;
     resolver 127.0.0.11 valid=10s ipv6=off;
 
@@ -152,8 +166,8 @@ server {
 server {
     listen 443 ssl;
     server_name ${portal_dom};
-    ssl_certificate /etc/nginx/certs/dev-server.fullchain.crt;
-    ssl_certificate_key /etc/nginx/certs/dev-server.key;
+    ssl_certificate ${SSL_CERT_FILE};
+    ssl_certificate_key ${SSL_CERT_KEY};
     ssl_protocols TLSv1.2 TLSv1.3;
     resolver 127.0.0.11 valid=10s ipv6=off;
     location / {
@@ -212,8 +226,8 @@ server {
 server {
     listen 443 ssl;
     server_name ${web_dom};
-    ssl_certificate /etc/nginx/certs/dev-server.fullchain.crt;
-    ssl_certificate_key /etc/nginx/certs/dev-server.key;
+    ssl_certificate ${SSL_CERT_FILE};
+    ssl_certificate_key ${SSL_CERT_KEY};
     ssl_protocols TLSv1.2 TLSv1.3;
   resolver 127.0.0.11 valid=10s ipv6=off;
     location / {
@@ -253,8 +267,8 @@ server {
 server {
     listen 443 ssl;
     server_name ${node_dom};
-    ssl_certificate /etc/nginx/certs/dev-server.fullchain.crt;
-    ssl_certificate_key /etc/nginx/certs/dev-server.key;
+    ssl_certificate ${SSL_CERT_FILE};
+    ssl_certificate_key ${SSL_CERT_KEY};
     ssl_protocols TLSv1.2 TLSv1.3;
     resolver 127.0.0.11 valid=10s ipv6=off;
     location / {
@@ -312,6 +326,12 @@ if [[ "$used" -eq 0 ]]; then
   echo "[ERROR] No routes in $ROUTES_JSON — thêm ít nhất một project" >&2
   exit 1
 fi
+
+# Cập nhật đường dẫn cert trong mọi conf (placeholder / tên cũ → ${SSL_CERT_BASENAME}.crt).
+for f in "$SITES_DIR"/*.conf; do
+  [[ -f "$f" ]] || continue
+  ssl_cert_substitute_in_file "$f"
+done
 
 echo "[DONE] Gateway sites in: $SITES_DIR/ (from $ROUTES_JSON)"
 

@@ -13,7 +13,7 @@ dev_env/
 ├── docker-compose.services.yml   ← LocalStack, Mailpit, mock, StackPort
 ├── gateway/sites/            ← nginx conf cá nhân (make gen-sites — không commit)
 ├── gateway/sites.example/    ← template infra trong git (phpmyadmin, pgadmin, …)
-├── certs/                    ← TLS local
+├── certs/                    ← TLS: ${PROJECT_NAME}.${SSL_DOMAIN_BASE}.crt + dev-rootCA.crt
 └── Makefile                  ← make help
 ```
 
@@ -22,12 +22,13 @@ dev_env/
 ```bash
 cp .env.example .env
 cp routes.json.example routes.json
-make gen-sites        # copy infra từ sites.example + sinh conf project từ routes.json
-make gen-ssl          # lần đầu: cert + gateway sites
+make init-sites       # infra conf (phpmyadmin, mail, …) — hoặc make gen-sites
+make gen-ssl          # lần đầu: cert + cập nhật gateway sites
 make hosts            # hosts.sample → /etc/hosts (WSL + Windows)
-make d-up             # gateway + DB
-make d-services-up    # LocalStack, Mailpit, mock, StackPort (tùy chọn)
+make d-up-all         # gateway + DB + dev services (tự tạo mạng + gateway/sites)
 ```
+
+Hoặc từng bước: `make d-up` (gateway + DB), `make d-services-up` (LocalStack, Mailpit, …).
 
 Sau đó bật compose của từng project (xem mục dưới). Chi tiết lệnh: **`make help`**
 
@@ -35,9 +36,10 @@ Sau đó bật compose của từng project (xem mục dưới). Chi tiết lệ
 
 | Biến | Mô tả |
 |------|--------|
-| `PROJECT_NAME` | Tiền tố container/volume của stack gateway |
-| `SSL_DOMAIN_BASE` | Suffix domain (vd. `local.com`) |
-| `BASE_SHARED_NETWORK_NAME` | **Tên mạng Docker chung** — project bên ngoài phải dùng cùng giá trị |
+| `PROJECT_NAME` | Tiền tố container/volume; phần tên file cert (`<PROJECT>.<SSL_DOMAIN_BASE>.crt`) |
+| `SSL_DOMAIN_BASE` | Suffix domain (vd. `local.com`); SAN cert = base + `*.<base>` |
+| `BASE_SHARED_NETWORK_NAME` | **Tên mạng Docker chung** (external) — project bên ngoài join cùng tên |
+| `DATA_PATH_HOST` | Prefix folder data DB trên host (mặc định `./data`; subpath: mysql, mysql80, postgres, redis) |
 | `HOSTS_IP` | IP ghi vào hosts (thường `127.0.0.1`) |
 | `HOST_UID` / `HOST_GID` | Khớp user host (`id -u`, `id -g`) |
 
@@ -45,10 +47,11 @@ Sau đó bật compose của từng project (xem mục dưới). Chi tiết lệ
 
 ### Nguyên tắc
 
-1. **Bật gateway trước** — `make d-up` tạo mạng `base_shared_net` (hoặc tên trong `BASE_SHARED_NETWORK_NAME`).
-2. **Compose project join mạng external** — không tạo mạng riêng, không publish cổng app ra host (gateway proxy).
-3. **Đăng ký domain** trong `routes.json` → `make gen-sites` + `make hosts` + `make gw-restart`.
-4. **`stack` trong JSON** phải khớp tiền tố tên container trên mạng.
+1. **Chuẩn bị gateway trước** — `make init-sites` / `make gen-sites` + `make gen-ssl` + `make hosts`.
+2. **Bật stack** — `make d-up-all` (tự tạo mạng `BASE_SHARED_NETWORK_NAME` + folder `gateway/sites` nếu thiếu).
+3. **Compose project join mạng external** — không publish cổng app ra host (gateway proxy).
+4. **Đăng ký domain** trong `routes.json` → `make gen-sites` + `make hosts` + `make gw-restart`.
+5. **`stack` trong JSON** phải khớp tiền tố tên container trên mạng.
 
 ### Quy ước tên container (gateway proxy tới)
 
@@ -170,22 +173,29 @@ Trên `base_shared_net`, dùng **tên service Docker** (không dùng `127.0.0.1`
 
 MySQL cũng expose `127.0.0.1:3306` ra host nếu cần chạy artisan/test ngoài container.
 
-**Data DB** bind ra folder host (kiểu Laradock), không dùng Docker named volume:
+**Data DB** bind ra folder host (kiểu Laradock), không dùng Docker named volume. Chỉ cấu hình prefix `DATA_PATH_HOST` trong `.env`; subfolder tự nối trong compose:
 
-| Instance | Folder mặc định | Biến `.env` (tùy chọn) |
-|----------|-----------------|------------------------|
-| MySQL 8.4 (`mysql`) | `data/mysql/` | `MYSQL_DATA_DIR` |
-| MySQL 8.0 (`mysql-80`) | `data/mysql-80/` | `MYSQL_80_DATA_DIR` |
-| PostgreSQL (`postgres`) | `data/postgres/` | `POSTGRES_DATA_DIR` |
-| Redis (`redis`) | `data/redis/` | `REDIS_DATA_DIR` |
+| Instance | Subfolder |
+|----------|-----------|
+| MySQL 8.4 (`mysql`) | `mysql` |
+| MySQL 8.0 (`mysql-80`) | `mysql80` |
+| PostgreSQL (`postgres`) | `postgres` |
+| Redis (`redis`) | `redis` |
+
+| `DATA_PATH_HOST` | Kết quả |
+|------------------|---------|
+| (rỗng / không set) | `./data/mysql`, `./data/mysql80`, … |
+| `~/env_data` | `~/env_data/mysql`, `~/env_data/mysql80`, … |
+
+Bind mount: `docker compose up` tự tạo folder trên host nếu chưa có (đúng quyền cho container DB).
 
 Chuyển data từ volume Docker cũ (một lần, thay `dev_*` theo `PROJECT_NAME`):
 
 ```bash
 make d-down-all
-mkdir -p data/mysql data/mysql-80 data/postgres data/redis
+mkdir -p data/mysql data/mysql80 data/postgres data/redis
 docker run --rm -v dev_mysql_data:/from -v "$(pwd)/data/mysql":/to alpine cp -a /from/. /to/
-docker run --rm -v dev_mysql_80_data:/from -v "$(pwd)/data/mysql-80":/to alpine cp -a /from/. /to/
+docker run --rm -v dev_mysql_80_data:/from -v "$(pwd)/data/mysql80":/to alpine cp -a /from/. /to/
 docker run --rm -v dev_postgres_data:/from -v "$(pwd)/data/postgres":/to alpine cp -a /from/. /to/
 docker run --rm -v dev_redis_data:/from -v "$(pwd)/data/redis":/to alpine cp -a /from/. /to/
 make d-up-all
@@ -230,6 +240,9 @@ make d-up-all
 
 ## SSL (WSL + Windows)
 
+Cert nginx: `certs/${PROJECT_NAME}.${SSL_DOMAIN_BASE}.crt` + `.key` (vd. `dev.local.com.crt`).  
+SAN: `SSL_DOMAIN_BASE` + `*.<SSL_DOMAIN_BASE>`. CA local: `certs/dev-rootCA.crt`.
+
 ```bash
 make gen-ssl
 # Windows (Admin): C:\Users\Public\dev_ssl\<PROJECT_NAME>\install-windows-trust.bat
@@ -240,5 +253,6 @@ Chi tiết domain: **`ROUTES.md`**
 ## Ghi chú
 
 - Nhiều clone `dev_env` trên một máy: đặt `BASE_SHARED_NETWORK_NAME` **khác nhau** mỗi clone; project `.env` phải khớp clone đang dùng.
-- Lỗi mạng: `make d-down` → `docker network rm base_shared_net` → `make d-up`.
+- Mạng `external`: `make d-up` / `d-up-all` tự `docker network create` nếu chưa có. Nếu lỗi label cũ: `make d-down-all` → `docker network rm base_shared_net` → `make d-up-all`.
+- `gateway/sites/` phải writable — chạy `make init-sites` hoặc `make gen-sites` **trước** `docker compose up` lần đầu (tránh folder root-owned).
 - Thêm host mới: sửa `routes.json` → `make gen-sites` — **không** cần `make gen-ssl` lại.

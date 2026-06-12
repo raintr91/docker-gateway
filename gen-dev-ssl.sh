@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# Local dev — một flow: ghi đè server cert, copy bundle Windows, gen gateway.
-# SAN từ .env: SSL_DOMAIN_BASE → base + *.<base>. Quy ước: ROUTES.md
+# Local dev TLS — ghi đè server cert, copy bundle Windows, chạy gen-gateway-sites.
+#
+# SAN từ .env: SSL_DOMAIN_BASE → base + *.<base> (ROUTES.md).
+# Output (CERT_BASENAME = ${PROJECT_NAME}.${SSL_DOMAIN_BASE}, vd. dev.local.com):
+#   certs/dev.local.com.crt   — server + CA (nginx ssl_certificate)
+#   certs/dev.local.com.key
+#   certs/dev.local.com.pfx
+#   certs/dev-rootCA.crt      — local CA (trust store)
 #
 # Usage:
-#   bash gen-dev-ssl.sh [.env] [certs]
-#   sh gen-dev-ssl.sh …   # cũng được: tự chuyển sang bash (dash không có pipefail)
+#   bash gen-dev-ssl.sh [.env] [certs-dir]
+#   make gen-ssl
 
 if [ -z "${BASH_VERSION:-}" ]; then
   exec /usr/bin/env bash "$0" "$@"
@@ -19,14 +25,16 @@ CERT_DIR="${2:-$PROJECT_ROOT/certs}"
 CA_CERT="$CERT_DIR/dev-rootCA.crt"
 CA_KEY="$CERT_DIR/dev-rootCA.key"
 CA_SERIAL="$CERT_DIR/dev-rootCA.srl"
-SERVER_KEY="$CERT_DIR/dev-server.key"
-SERVER_CSR="$CERT_DIR/dev-server.csr"
-SERVER_CERT="$CERT_DIR/dev-server.crt"
-SERVER_CHAIN="$CERT_DIR/dev-server.fullchain.crt"
-SERVER_PFX="$CERT_DIR/dev-server.pfx"
-OPENSSL_CNF="$CERT_DIR/dev-server-openssl.cnf"
 WINDOWS_BAT="$CERT_DIR/install-windows-trust.bat"
 WINDOWS_PS1="$CERT_DIR/install-windows-trust.ps1"
+
+# Server cert — set in setup_cert_paths(): ${PROJECT_NAME}.${SSL_DOMAIN_BASE} (vd. dev.local.com.crt)
+SERVER_KEY=""
+SERVER_CSR=""
+SERVER_CERT=""
+SERVER_PFX=""
+OPENSSL_CNF=""
+CERT_BASENAME=""
 
 CA_SUBJECT="/C=VN/ST=HN/L=HN/O=demo_unittest/OU=LocalDev/CN=demo_unittest Local Dev Root CA"
 DAYS_CA="${DAYS_CA:-3650}"
@@ -59,6 +67,25 @@ load_ssl_domains_from_env() {
 
     DOMAINS=("$ssl_base" "*.$ssl_base")
     COMMON_NAME="*.$ssl_base"
+}
+
+setup_cert_paths() {
+    local project_name ssl_base
+    project_name="$(read_env PROJECT_NAME)"
+    project_name="${project_name:-local_dev}"
+    ssl_base="$(read_env SSL_DOMAIN_BASE)"
+    ssl_base="$(echo "$ssl_base" | xargs)"
+    ssl_base="${ssl_base#.}"
+    [[ -n "$ssl_base" ]] || ssl_base="local.com"
+
+    CERT_BASENAME="${project_name}.${ssl_base}"
+    CERT_BASENAME="${CERT_BASENAME//[^a-zA-Z0-9._-]/}"
+
+    SERVER_KEY="$CERT_DIR/${CERT_BASENAME}.key"
+    SERVER_CSR="$CERT_DIR/${CERT_BASENAME}.csr"
+    SERVER_CERT="$CERT_DIR/${CERT_BASENAME}.crt"
+    SERVER_PFX="$CERT_DIR/${CERT_BASENAME}.pfx"
+    OPENSSL_CNF="$CERT_DIR/${CERT_BASENAME}-openssl.cnf"
 }
 
 build_openssl_config() {
@@ -119,9 +146,10 @@ create_ca_if_missing() {
 
 generate_server_cert() {
     local common_name="$1"
+    local server_leaf="$CERT_DIR/${CERT_BASENAME}.leaf.crt"
 
-    if [[ -f "$SERVER_KEY" || -f "$SERVER_CHAIN" ]]; then
-        echo "[INFO] Ghi đè cert cũ → $SERVER_CHAIN"
+    if [[ -f "$SERVER_KEY" || -f "$SERVER_CERT" ]]; then
+        echo "[INFO] Ghi đè cert cũ → $SERVER_CERT"
     else
         echo "[INFO] Tạo server cert: $common_name"
     fi
@@ -134,20 +162,21 @@ generate_server_cert() {
         -CA "$CA_CERT" \
         -CAkey "$CA_KEY" \
         -CAcreateserial \
-        -out "$SERVER_CERT" \
+        -out "$server_leaf" \
         -extensions v3_server \
         -extfile "$OPENSSL_CNF"
 
-    cat "$SERVER_CERT" "$CA_CERT" >"$SERVER_CHAIN"
+    cat "$server_leaf" "$CA_CERT" >"$SERVER_CERT"
 
     openssl pkcs12 -export \
         -out "$SERVER_PFX" \
         -inkey "$SERVER_KEY" \
-        -in "$SERVER_CERT" \
+        -in "$server_leaf" \
         -certfile "$CA_CERT" \
         -passout pass:
 
-    rm -f "$SERVER_CSR"
+    rm -f "$SERVER_CSR" "$server_leaf"
+    rm -f "$CERT_DIR/${CERT_BASENAME}.fullchain.crt" "$CERT_DIR/dev-server.fullchain.crt"
 }
 
 install_ca_into_wsl() {
@@ -342,14 +371,15 @@ copy_windows_bundle_if_available() {
     cp -f "$CA_CERT" "$out_dir/dev-rootCA.crt"
     cp -f "$WINDOWS_BAT" "$out_dir/install-windows-trust.bat"
     cp -f "$WINDOWS_PS1" "$out_dir/install-windows-trust.ps1"
-    cp -f "$SERVER_CERT" "$out_dir/dev-server.crt"
-    cp -f "$SERVER_KEY" "$out_dir/dev-server.key"
-    cp -f "$SERVER_PFX" "$out_dir/dev-server.pfx"
+    cp -f "$SERVER_CERT" "$out_dir/${CERT_BASENAME}.crt"
+    cp -f "$SERVER_KEY" "$out_dir/${CERT_BASENAME}.key"
+    cp -f "$SERVER_PFX" "$out_dir/${CERT_BASENAME}.pfx"
     echo "[INFO] Copied Windows bundle to: $out_dir"
     echo "[INFO] Windows path: C:\\Users\\Public\\dev_ssl\\${project_name}\\"
 }
 
 load_ssl_domains_from_env
+setup_cert_paths
 create_ca_if_missing
 generate_server_cert "$COMMON_NAME"
 generate_windows_bat
@@ -366,7 +396,7 @@ project_name="${project_name//[^a-zA-Z0-9._-]/}"
 win_dir="C:\\Users\\Public\\dev_ssl\\${project_name}"
 
 echo
-echo "[DONE] Cert: $SERVER_CHAIN"
+echo "[DONE] Cert: $SERVER_CERT"
 echo
 echo "  Windows — chạy lại (Admin), kể cả khi WSL đã trust mà Chrome vẫn báo lỗi:"
 echo "    ${win_dir}\\install-windows-trust.bat"

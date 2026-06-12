@@ -25,7 +25,7 @@ help:
 	@echo "  make init-sites        — chỉ copy sites.example → gateway/sites"
 	@echo "  make gw-safe           — gen-sites + up gateway + nginx -t"
 	@echo "  make hosts             — print-hosts-from-env.sh (WSL + Windows)"
-	@echo "  make gen-ssl | ssl     — gen-dev-ssl.sh + combined CA"
+	@echo "  make gen-ssl | ssl     — cert TLS (\$${PROJECT_NAME}.\$${SSL_DOMAIN_BASE}.crt) + gen-sites"
 	@echo "  make certs-combined    — refresh certs/combined-ca.pem only"
 	@echo ""
 	@echo "Dev services (Makefile.services.mk):"

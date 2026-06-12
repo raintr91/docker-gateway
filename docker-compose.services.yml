@@ -1,9 +1,9 @@
-# Dev tools: MySQL 8.0 + Redis + LocalStack (S3/SQS/SNS) + Mailpit + mock SMS/Slack + StackPort (S3/SQS/SNS/… — một UI ~37MB).
-# Luôn gộp với docker-compose.yml (cùng mạng base_shared_net / base-shared — compose sẽ tạo mạng nếu chưa có):
-#   cd docker && docker compose -f docker-compose.yml -f docker-compose.services.yml up -d
-# Hoặc: make d-services-up
+# Dev tools: MySQL 8.0 + Redis + LocalStack + Mailpit + mock + StackPort.
+# Gộp với docker-compose.yml (mạng base_shared_net / base-shared — external):
+#   make d-services-up   hoặc   make d-up-all
 #
-# Gateway: file cứng trong gateway/sites/*.conf (mail, mock, stackport, redisadmin).
+# Data bind: ${DATA_PATH_HOST:-./data}/mysql80, .../redis (compose tự mkdir host)
+# Gateway infra conf: gateway/sites/*.conf (mail, mock, stackport, redisadmin)
 
 services:
   # MySQL 8.0 (mysql_native_password). Host:127.0.0.1:${MYSQL_80_PORT:-13307}. phpMyAdmin: server "MySQL 8.0".
@@ -22,8 +22,8 @@ services:
     ports:
       - "${MYSQL_80_PORT:-13307}:3306"
     volumes:
-      # Bind mount — data trên host: ${MYSQL_80_DATA_DIR:-./data/mysql-80}
-      - ${MYSQL_80_DATA_DIR:-./data/mysql-80}:/var/lib/mysql
+      # Bind mount: ${DATA_PATH_HOST:-./data}/mysql80 (compose tự tạo folder host nếu chưa có)
+      - ${DATA_PATH_HOST:-./data}/mysql80:/var/lib/mysql
       - ./mysql/initdb-80:/docker-entrypoint-initdb.d:ro
       - ./mysql/conf.d:/etc/mysql/conf.d:ro
     networks:
@@ -37,8 +37,8 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
-      # Bind mount — data trên host: ${REDIS_DATA_DIR:-./data/redis}
-      - ${REDIS_DATA_DIR:-./data/redis}:/data
+      # Bind mount: ${DATA_PATH_HOST:-./data}/redis (compose tự tạo folder host nếu chưa có)
+      - ${DATA_PATH_HOST:-./data}/redis:/data
     networks:
       - base-shared
 

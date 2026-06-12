@@ -4,7 +4,8 @@ Chỉnh **`routes.json`** (`cp routes.json.example routes.json`). Cần `python3
 
 ## Quy ước
 
-- Mọi `host` trong JSON: **`something.<SSL_DOMAIN_BASE>`** (vd. `saas-api.local.com`; đổi base trong `.env` thì đổi suffix host cho khớp). Cert: `SSL_DOMAIN_BASE` + `*.<base>` — không đọc từng host khi gen SSL.
+- Mọi `host` trong JSON: **`something.<SSL_DOMAIN_BASE>`** (vd. `saas-api.local.com`). Cert SAN: `SSL_DOMAIN_BASE` + `*.<base>` — không đọc từng host khi gen SSL.
+- File cert nginx: `certs/${PROJECT_NAME}.${SSL_DOMAIN_BASE}.crt` + `.key` (mount vào gateway `/etc/nginx/certs/`).
 - **API / portal không publish cổng ra host** — gateway proxy qua `base_shared_net`:
   - API: `<stack>-api-nginx:80` — `stack` trong `api.stack` (khớp `API_STACK_PREFIX` ở compose, repo có thể ở workspace khác)
   - Portal: `<stack>-portal-node:3000` — cố định; `pnpm dev` chỉ trong container
@@ -24,5 +25,5 @@ Chỉnh **`routes.json`** (`cp routes.json.example routes.json`). Cần `python3
 make gen-sites   # infra từ sites.example + project từ routes.json
 make init-sites  # chỉ infra (phpmyadmin, mail, mock, …)
 make hosts       # hosts.sample
-make gen-ssl     # ghi đè cert + nhắc install-windows-trust.bat trên Windows
+make gen-ssl     # cert ${PROJECT_NAME}.${SSL_DOMAIN_BASE}.crt + gen-sites + nhắc Windows trust
 ```
