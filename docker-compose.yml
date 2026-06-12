@@ -83,7 +83,8 @@ services:
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
+      # Bind mount (Laradock-style) — data trên host: ${MYSQL_DATA_DIR:-./data/mysql}
+      - ${MYSQL_DATA_DIR:-./data/mysql}:/var/lib/mysql
       - ./mysql/initdb:/docker-entrypoint-initdb.d:ro
       - ./mysql/conf.d:/etc/mysql/conf.d:ro
     networks:
@@ -103,7 +104,8 @@ services:
     ports:
       - "${POSTGRES_PORT:-15432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Bind mount — data trên host: ${POSTGRES_DATA_DIR:-./data/postgres}
+      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
@@ -138,9 +140,3 @@ networks:
   base-shared:
     name: ${BASE_SHARED_NETWORK_NAME:-base_shared_net}
     driver: bridge
-
-volumes:
-  mysql_data:
-    name: ${PROJECT_NAME:-local_dev}_mysql_data
-  postgres_data:
-    name: ${PROJECT_NAME:-local_dev}_postgres_data

@@ -2,3 +2,9 @@
 hosts.sample
 routes.json
 gateway/sites/
+
+# DB bind mount (Laradock-style) — không commit data
+data/mysql/
+data/mysql-80/
+data/postgres/
+data/redis/

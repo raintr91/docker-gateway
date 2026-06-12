@@ -22,7 +22,8 @@ services:
     ports:
       - "${MYSQL_80_PORT:-13307}:3306"
     volumes:
-      - mysql_80_data:/var/lib/mysql
+      # Bind mount — data trên host: ${MYSQL_80_DATA_DIR:-./data/mysql-80}
+      - ${MYSQL_80_DATA_DIR:-./data/mysql-80}:/var/lib/mysql
       - ./mysql/initdb-80:/docker-entrypoint-initdb.d:ro
       - ./mysql/conf.d:/etc/mysql/conf.d:ro
     networks:
@@ -36,7 +37,8 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      # Bind mount — data trên host: ${REDIS_DATA_DIR:-./data/redis}
+      - ${REDIS_DATA_DIR:-./data/redis}:/data
     networks:
       - base-shared
 
@@ -103,10 +105,6 @@ services:
       - base-shared
 
 volumes:
-  redis_data:
-    name: ${PROJECT_NAME:-local_dev}_redis_data
-  mysql_80_data:
-    name: ${PROJECT_NAME:-local_dev}_mysql_80_data
   localstack_data:
     name: ${PROJECT_NAME:-local_dev}_localstack_data
   mock_api_data:

@@ -170,6 +170,27 @@ Trên `base_shared_net`, dùng **tên service Docker** (không dùng `127.0.0.1`
 
 MySQL cũng expose `127.0.0.1:3306` ra host nếu cần chạy artisan/test ngoài container.
 
+**Data DB** bind ra folder host (kiểu Laradock), không dùng Docker named volume:
+
+| Instance | Folder mặc định | Biến `.env` (tùy chọn) |
+|----------|-----------------|------------------------|
+| MySQL 8.4 (`mysql`) | `data/mysql/` | `MYSQL_DATA_DIR` |
+| MySQL 8.0 (`mysql-80`) | `data/mysql-80/` | `MYSQL_80_DATA_DIR` |
+| PostgreSQL (`postgres`) | `data/postgres/` | `POSTGRES_DATA_DIR` |
+| Redis (`redis`) | `data/redis/` | `REDIS_DATA_DIR` |
+
+Chuyển data từ volume Docker cũ (một lần, thay `dev_*` theo `PROJECT_NAME`):
+
+```bash
+make d-down-all
+mkdir -p data/mysql data/mysql-80 data/postgres data/redis
+docker run --rm -v dev_mysql_data:/from -v "$(pwd)/data/mysql":/to alpine cp -a /from/. /to/
+docker run --rm -v dev_mysql_80_data:/from -v "$(pwd)/data/mysql-80":/to alpine cp -a /from/. /to/
+docker run --rm -v dev_postgres_data:/from -v "$(pwd)/data/postgres":/to alpine cp -a /from/. /to/
+docker run --rm -v dev_redis_data:/from -v "$(pwd)/data/redis":/to alpine cp -a /from/. /to/
+make d-up-all
+```
+
 ### Checklist project mới
 
 - [ ] `BASE_SHARED_NETWORK_NAME` khớp `dev_env/.env`
